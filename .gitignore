@@ -1,0 +1,16 @@
+# Secrets and local environment
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+backend/firebase-adminsdk*.json
+
+# Local dependencies and generated files
+backend/venv/
+**/__pycache__/
+**/*.py[cod]
+frontend/node_modules/
+frontend/dist/
+backend/debug_output.jpg

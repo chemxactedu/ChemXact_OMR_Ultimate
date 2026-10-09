@@ -1,0 +1,11 @@
+fastapi
+uvicorn
+opencv-python-headless
+python-multipart
+numpy
+imutils
+pydantic
+Pillow
+python-dotenv
+google-genai
+firebase-admin

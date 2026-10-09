@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: chemxact-omr-api
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: FIREBASE_ADMIN_CREDENTIALS
+        value: /etc/secrets/firebase-adminsdk.json
+      - key: CORS_ORIGINS
+        value: https://omr.chemxact.in
