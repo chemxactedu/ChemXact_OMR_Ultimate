@@ -13,4 +13,4 @@ services:
       - key: FIREBASE_ADMIN_CREDENTIALS
         value: /etc/secrets/firebase-adminsdk.json
       - key: CORS_ORIGINS
-        value: https://omr.chemxact.in
+        value: https://omr.chemxact.in,http://localhost:5173,http://127.0.0.1:5173

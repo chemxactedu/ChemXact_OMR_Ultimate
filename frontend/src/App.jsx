@@ -7,6 +7,21 @@ import { auth, loginWithGoogle, logoutUser } from './firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || (import.meta.env.DEV ? 'http://localhost:8001' : '');
+const USAGE_FETCH_RETRY_DELAYS = [1000, 2000, 4000, 8000, 10000, 10000];
+
+async function fetchUsageWithRetry(url, options) {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await fetch(url, options);
+    } catch (requestError) {
+      if (!(requestError instanceof TypeError) || attempt >= USAGE_FETCH_RETRY_DELAYS.length) {
+        throw requestError;
+      }
+      await new Promise((resolve) => window.setTimeout(resolve, USAGE_FETCH_RETRY_DELAYS[attempt]));
+    }
+  }
+}
+
 function downloadBlob(blob, filename) {
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
@@ -54,6 +69,8 @@ export default function App() {
   const [editingResultId, setEditingResultId] = useState(null);
   const [editDraft, setEditDraft] = useState(null);
   const [usage, setUsage] = useState(null);
+  const [usageLoading, setUsageLoading] = useState(false);
+  const [usageError, setUsageError] = useState('');
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [usageRefresh, setUsageRefresh] = useState(0);
@@ -69,25 +86,43 @@ export default function App() {
   useEffect(() => {
     if (!user) {
       setUsage(null);
+      setUsageLoading(false);
+      setUsageError('');
       return undefined;
     }
 
     let cancelled = false;
     const loadUsage = async () => {
+      setUsageLoading(true);
+      setUsageError('');
+      setError('');
       if (!API_BASE_URL) {
-        if (!cancelled) setError('Scan API is not configured. Set VITE_API_BASE_URL before building the deployed frontend.');
+        if (!cancelled) {
+          const message = 'Scan API is not configured. Set VITE_API_BASE_URL before building the deployed frontend.';
+          setUsageError(message);
+          setError(message);
+          setUsageLoading(false);
+        }
         return;
       }
       try {
         const token = await user.getIdToken();
-        const response = await fetch(`${API_BASE_URL}/api/usage`, {
+        const response = await fetchUsageWithRetry(`${API_BASE_URL}/api/usage`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         const data = await response.json();
         if (!response.ok) throw new Error(data.detail || 'Could not load scan quota.');
         if (!cancelled) setUsage(data);
       } catch (loadError) {
-        if (!cancelled) setError(loadError.message);
+        if (!cancelled) {
+          const message = loadError instanceof TypeError && loadError.message === 'Failed to fetch'
+            ? 'Could not reach the scan service after several tries. Check VITE_API_BASE_URL and make sure Render CORS_ORIGINS includes this website domain.'
+            : loadError.message || 'Could not load scan quota.';
+          setUsageError(message);
+          setError(message);
+        }
+      } finally {
+        if (!cancelled) setUsageLoading(false);
       }
     };
     loadUsage();
@@ -98,7 +133,14 @@ export default function App() {
     try {
       await loginWithGoogle();
     } catch (loginError) {
-      setError(`Login failed: ${loginError.message}`);
+      const message = loginError.code === 'auth/popup-blocked'
+        ? 'Your browser blocked the Google sign-in window. Allow pop-ups for this site and try again.'
+        : loginError.code === 'auth/popup-closed-by-user'
+          ? 'The Google sign-in window was closed before login finished. Please try again.'
+          : loginError.code === 'auth/network-request-failed'
+            ? 'Google sign-in could not reach Firebase. Check your connection, VPN, or ad blocker and try again.'
+            : `Login failed: ${loginError.message}`;
+      setError(message);
     }
   };
 
@@ -170,7 +212,9 @@ export default function App() {
         (data.quota_reached ? ' Daily limit reached; unscanned images are still selected for tomorrow.' : ''),
       );
     } catch (scanError) {
-      setError(scanError.message || 'Could not connect to the scan server.');
+      setError(scanError instanceof TypeError && scanError.message === 'Failed to fetch'
+        ? 'Could not reach the scan service. Check VITE_API_BASE_URL and make sure Render CORS_ORIGINS includes this website domain.'
+        : scanError.message || 'Could not connect to the scan server.');
     } finally {
       setIsScanning(false);
     }
@@ -384,7 +428,17 @@ export default function App() {
         <div className="topbar-right">
           <div className="quota-pill">
             <span className="quota-spark">✦</span>
-            <span>{usage?.is_premium ? 'Unlimited scans' : usage ? `${usage.remaining} scans left today` : 'Checking scan limit…'}</span>
+            <span>{usage?.is_premium ? 'Unlimited scans' : usage ? `${usage.remaining} scans left today` : usageLoading ? 'Checking scan limit…' : usageError ? 'Scan limit unavailable' : 'Scan limit not loaded'}</span>
+            {usageError && (
+              <button
+                type="button"
+                className="quota-retry"
+                onClick={() => setUsageRefresh((version) => version + 1)}
+                disabled={usageLoading}
+              >
+                {usageLoading ? 'Retrying…' : 'Retry'}
+              </button>
+            )}
           </div>
           <div className="teacher-profile">
             {user.photoURL
@@ -399,7 +453,7 @@ export default function App() {
       <main className="dashboard">
         <section className="welcome-banner">
           <div className="welcome-copy">
-            <p><span className="mousia-wordmark">Mousia</span> AI helps turn answer sheets into a clearer picture of how your students are learning.</p>
+            <p><span className="ousi-wordmark">Ousi</span> AI helps turn answer sheets into a clearer picture of how your students are learning.</p>
           </div>
           <div className="banner-art" aria-hidden="true">
             <span className="art-star star-left">✦</span>
@@ -512,10 +566,10 @@ export default function App() {
               className="button button-primary scan-button"
             >
               <span>{isScanning ? '✦' : '✳'}</span>
-              {isScanning ? 'Mousia is scanning...' : quotaReached ? 'Daily scan limit reached' : `Scan ${selectedFiles.length || ''} ${selectedFiles.length === 1 ? 'sheet' : 'sheets'}`}
+              {isScanning ? 'Ousi is scanning...' : quotaReached ? 'Daily scan limit reached' : `Scan ${selectedFiles.length || ''} ${selectedFiles.length === 1 ? 'sheet' : 'sheets'}`}
               {!isScanning && !quotaReached && <span className="button-arrow">→</span>}
             </button>
-            {isScanning && <p className="scan-helper">Mousia is carefully checking each answer on your sheet.</p>}
+            {isScanning && <p className="scan-helper">Ousi’s taking it from here. Sit back and relax—we’ll let you know as soon as your sheets are ready.</p>}
             {quotaReached && (
               <p className="quota-message">
                 That’s all 15 scans for today. Come back tomorrow to keep going.

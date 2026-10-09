@@ -8,6 +8,8 @@ are shown separately and do not rescale the correct-answer score. Results can be
 as Excel, PDF, or Word.
 Each sheet is normally sent to Gemini 3.8 Flash once, using high visual resolution and
 high thinking effort, as a full-page image plus four enlarged, overlapping details.
+Batch scans process up to two sheets at a time to reduce waiting without overwhelming
+the free-tier backend.
 If the model is unavailable or rate-limited, the backend retries and automatically
 switches to Gemini 3.7 Flash and then Gemini 3.6 Flash. Scores are calculated locally
 from the returned answers. Empty bubble outlines and unfilled spaces should be reported
@@ -29,6 +31,11 @@ Each free account can scan 15 sheets per calendar day. Failed image/AI scans are
 not charged. A batch stops when the account reaches its daily quota; unscanned
 sheets can be submitted the next day.
 
+If Firebase credentials are not mounted yet, the app still boots successfully and
+`/health` responds with a `degraded` status instead of crashing the deployment;
+the authenticated scan and quota endpoints keep returning a 503 until Firebase is
+available.
+
 ## Frontend setup
 
 1. In `frontend`, install packages with `npm install`.
@@ -38,7 +45,9 @@ sheets can be submitted the next day.
 
 The backend defaults to port `8001` (`PORT` or `OMR_PORT` can override it). For local development,
 the frontend defaults to `http://localhost:8001`; for a deployed build, set
-`VITE_API_BASE_URL` to the public backend URL.
+`VITE_API_BASE_URL` to the public backend URL. If a local frontend uses the deployed API,
+include `http://localhost:5173` and `http://127.0.0.1:5173` in the Render service's
+`CORS_ORIGINS` value alongside the deployed website origin.
 
 ## Production deployment checklist
 

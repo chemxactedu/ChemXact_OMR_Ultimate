@@ -1,3 +1,4 @@
+import asyncio
 import os
 from datetime import date
 from typing import List, Optional
@@ -13,6 +14,7 @@ import omr_engine
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 MAX_IMAGE_BYTES = 10 * 1024 * 1024
 DAILY_FREE_LIMIT = 15
+MAX_CONCURRENT_SCANS = 2
 
 credential_candidates = [
     os.environ.get("FIREBASE_ADMIN_CREDENTIALS", ""),
@@ -55,8 +57,12 @@ app.add_middleware(
 @app.get("/health")
 def health_check():
     if db is None:
-        raise HTTPException(status_code=503, detail="Firebase is unavailable.")
-    return {"status": "ok"}
+        return {
+            "status": "degraded",
+            "firebase": "unavailable",
+            "detail": "Firebase is unavailable; scan and quota endpoints will return an error until credentials are configured.",
+        }
+    return {"status": "ok", "firebase": "ready"}
 
 
 def require_user(authorization: Optional[str] = Header(default=None)):
@@ -153,45 +159,23 @@ async def bulk_scan(
 
     uid = user["uid"]
     email = user.get("email", "")
-    results = []
+    results = [None] * len(files)
     quota_reached = False
 
-    for index, uploaded_file in enumerate(files):
-        filename = uploaded_file.filename or f"Sheet {index + 1}"
-        if not reserve_scan(uid, email):
-            quota_reached = True
-            results.extend({
-                "filename": pending.filename or f"Sheet {pending_index + 1}",
-                "status": "Not scanned",
-                "message": "Daily limit reached. Try again tomorrow.",
-            } for pending_index, pending in enumerate(files[index:], start=index))
-            break
-
-        image_bytes = await uploaded_file.read(MAX_IMAGE_BYTES + 1)
-        if len(image_bytes) > MAX_IMAGE_BYTES:
-            release_failed_scan(uid)
-            results.append({
-                "filename": filename,
-                "status": "Failed",
-                "message": "Image exceeds the 10 MB limit.",
-            })
-            continue
-
+    async def scan_one(index, filename, image_bytes):
         scan = await run_in_threadpool(
             omr_engine.process_omr_image,
             image_bytes,
             answer_key.upper(),
         )
         if not scan.get("success"):
-            release_failed_scan(uid)
-            results.append({
+            await run_in_threadpool(release_failed_scan, uid)
+            return {
                 "filename": filename,
                 "status": "Failed",
                 "message": scan.get("message", "Scan failed."),
-            })
-            continue
-
-        results.append({
+            }
+        return {
             "filename": filename,
             "student_name": scan["student_name"],
             "roll": scan["roll"],
@@ -199,7 +183,44 @@ async def bulk_scan(
             "total": scan["total"],
             "status": "Scanned",
             "details": scan["details"],
-        })
+        }
+
+    for batch_start in range(0, len(files), MAX_CONCURRENT_SCANS):
+        batch_end = min(batch_start + MAX_CONCURRENT_SCANS, len(files))
+        scan_jobs = []
+        for index in range(batch_start, batch_end):
+            uploaded_file = files[index]
+            filename = uploaded_file.filename or f"Sheet {index + 1}"
+            if not reserve_scan(uid, email):
+                quota_reached = True
+                for pending_index in range(index, len(files)):
+                    pending = files[pending_index]
+                    results[pending_index] = {
+                        "filename": pending.filename or f"Sheet {pending_index + 1}",
+                        "status": "Not scanned",
+                        "message": "Daily limit reached. Try again tomorrow.",
+                    }
+                break
+
+            image_bytes = await uploaded_file.read(MAX_IMAGE_BYTES + 1)
+            if len(image_bytes) > MAX_IMAGE_BYTES:
+                await run_in_threadpool(release_failed_scan, uid)
+                results[index] = {
+                    "filename": filename,
+                    "status": "Failed",
+                    "message": "Image exceeds the 10 MB limit.",
+                }
+                continue
+            scan_jobs.append((index, filename, image_bytes))
+
+        batch_results = await asyncio.gather(*(
+            scan_one(index, filename, image_bytes)
+            for index, filename, image_bytes in scan_jobs
+        ))
+        for (index, _, _), result in zip(scan_jobs, batch_results):
+            results[index] = result
+        if quota_reached:
+            break
 
     return {
         "success": True,

@@ -84,6 +84,8 @@ button:focus-visible, textarea:focus-visible, input:focus-visible + .upload-zone
   font-weight: 700;
 }
 .quota-spark { color: #e9a742; font-size: 15px; }
+.quota-retry { padding: 2px 0 2px 7px; border: 0; border-left: 1px solid #dcd4f1; color: #6343c1; background: transparent; font-size: 10px; font-weight: 700; }
+.quota-retry:disabled { cursor: wait; opacity: .65; }
 .teacher-profile { gap: 9px; }
 .teacher-avatar { width: 34px; height: 34px; object-fit: cover; border-radius: 50%; }
 .avatar-fallback { display: grid; place-items: center; color: #6450aa; background: #eee9fb; font-weight: 800; }
@@ -114,7 +116,7 @@ button:focus-visible, textarea:focus-visible, input:focus-visible + .upload-zone
 .welcome-copy { position: relative; z-index: 1; max-width: 550px; }
 .welcome-copy h1.welcome-announcement { margin: 7px 0 0; color: #7052c5; font-family: Manrope, 'Segoe UI', sans-serif; font-size: clamp(42px, 6vw, 62px); font-weight: 800; letter-spacing: -2.5px; line-height: 1.05; }
 .powered-by { display: inline-block; margin: 5px 0 11px; color: #9185ad; font-size: 10px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; }
-.mousia-wordmark { color: #7052c5; font-family: Georgia, 'Times New Roman', serif; font-size: 1.16em; font-style: italic; font-weight: 700; letter-spacing: -.5px; }
+.ousi-wordmark { color: #7052c5; font-family: Georgia, 'Times New Roman', serif; font-size: 1.16em; font-style: italic; font-weight: 700; letter-spacing: -.5px; }
 .eyebrow { color: #9289a6; font-size: 9px; font-weight: 800; letter-spacing: 1.65px; }
 .eyebrow-dot { width: 7px; height: 7px; display: inline-block; margin: 0 7px 1px 0; border-radius: 50%; background: #86bd91; }
 .welcome-copy h1 {
