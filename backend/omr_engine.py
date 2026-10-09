@@ -146,7 +146,7 @@ def _build_vision_parts(image_bytes: bytes) -> list:
 def process_omr_image(image_bytes: bytes, answer_key: str):
     api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
-        return {"success": False, "message": "GEMINI_API_KEY is missing from backend/.env."}
+        return {"success": False, "message": "Ousi Vision is not configured on the scan service."}
     if not re.fullmatch(r"[ABCD]+", answer_key):
         return {"success": False, "message": "Answer key must contain at least one choice (A-D)."}
     question_count = len(answer_key)
@@ -237,13 +237,13 @@ Do not include an answer key or calculate a score.
             return {
                 "success": False,
                 "message": (
-                    "Gemini Vision is temporarily unavailable across the available models. "
+                    "Ousi Vision is temporarily unavailable. "
                     "Please try again shortly; this failed scan does not use your daily quota."
                 ),
             }
         if isinstance(exc, ValueError):
             return {
                 "success": False,
-                "message": f"Gemini could not read all {question_count} answers. Please upload a clearer, full-sheet image.",
+                "message": f"Ousi Vision could not read all {question_count} answers. Please upload a clearer, full-sheet image.",
             }
-        return {"success": False, "message": f"Gemini scan failed: {exc}"}
+        return {"success": False, "message": "Ousi Vision could not complete this scan. Please try again."}
