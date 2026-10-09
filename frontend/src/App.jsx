@@ -6,7 +6,9 @@ import jsPDF from 'jspdf';
 import { auth, loginWithGoogle, logoutUser } from './firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || (import.meta.env.DEV ? 'http://localhost:8001' : '');
+const API_BASE_URL = (
+  import.meta.env.VITE_API_BASE_URL || (import.meta.env.DEV ? 'http://localhost:8001' : '')
+).trim().replace(/[/.]+$/, '');
 const USAGE_FETCH_RETRY_DELAYS = [1000, 2000, 4000, 8000, 10000, 10000];
 
 async function fetchUsageWithRetry(url, options) {
