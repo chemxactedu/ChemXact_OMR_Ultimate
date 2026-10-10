@@ -39,7 +39,10 @@ def _is_retryable_error(error: Exception) -> bool:
     if code is None:
         code = getattr(error, "status_code", None)
     if isinstance(code, int):
-        return code in {404, 429, 500, 502, 503, 504}
+        return (
+            code in {404, 429, 500, 502, 503, 504}
+            or (code == 400 and _is_model_unavailable_error(error))
+        )
 
     error_text = f"{code or ''} {error}".upper()
     return (
@@ -47,7 +50,13 @@ def _is_retryable_error(error: Exception) -> bool:
         or any(status in error_text for status in ("NOT_FOUND", "UNAVAILABLE", "RESOURCE_EXHAUSTED"))
         or (
             "MODEL" in error_text
-            and any(phrase in error_text for phrase in ("NOT FOUND", "NO LONGER AVAILABLE", "UNAVAILABLE"))
+            and any(phrase in error_text for phrase in (
+                "NOT FOUND",
+                "NO LONGER AVAILABLE",
+                "NOT SUPPORTED",
+                "UNSUPPORTED",
+                "UNAVAILABLE",
+            ))
         )
     )
 
@@ -59,16 +68,31 @@ def _is_model_unavailable_error(error: Exception) -> bool:
     error_text = f"{code or ''} {error}".upper()
     return (
         code == 404
+        or (
+            code == 400
+            and "MODEL" in error_text
+            and any(phrase in error_text for phrase in (
+                "NOT FOUND",
+                "UNAVAILABLE",
+                "NOT SUPPORTED",
+                "UNSUPPORTED",
+            ))
+        )
         or any(status in error_text for status in ("NOT_FOUND", "UNAVAILABLE"))
         or (
             "MODEL" in error_text
-            and any(phrase in error_text for phrase in ("NOT FOUND", "NO LONGER AVAILABLE"))
+            and any(phrase in error_text for phrase in (
+                "NOT FOUND",
+                "NO LONGER AVAILABLE",
+                "NOT SUPPORTED",
+                "UNSUPPORTED",
+            ))
         )
     )
 
 
 def _read_once(client, prompt: str, image_parts: list, question_count: int) -> dict:
-    last_retryable_error = None
+    last_failure = None
     models = (GEMINI_MODEL, *FALLBACK_GEMINI_MODELS)
     for model in models:
         for attempt in range(MAX_GEMINI_ATTEMPTS_PER_MODEL):
@@ -82,15 +106,10 @@ def _read_once(client, prompt: str, image_parts: list, question_count: int) -> d
                         thinking_config=types.ThinkingConfig(thinking_level="high"),
                     ),
                 )
-                result = _extract_json(response.text or "")
-                answers = result.get("answers")
-                if not isinstance(answers, list) or len(answers) != question_count:
-                    raise ValueError(f"Gemini did not return exactly {question_count} answers.")
-                return result
             except Exception as exc:
                 if not _is_retryable_error(exc):
                     raise
-                last_retryable_error = exc
+                last_failure = exc
                 logging.warning(
                     "Gemini model %s failed (attempt %s/%s).",
                     model,
@@ -101,8 +120,23 @@ def _read_once(client, prompt: str, image_parts: list, question_count: int) -> d
                     break
                 if attempt + 1 < MAX_GEMINI_ATTEMPTS_PER_MODEL:
                     time.sleep(2 ** attempt)
+                continue
 
-    raise last_retryable_error or RuntimeError("Gemini read did not complete.")
+            try:
+                result = _extract_json(response.text or "")
+                answers = result.get("answers")
+                if not isinstance(answers, list) or len(answers) != question_count:
+                    raise ValueError(f"Gemini did not return exactly {question_count} answers.")
+                return result
+            except (ValueError, TypeError) as exc:
+                last_failure = exc
+                logging.warning(
+                    "Gemini model %s returned an unusable answer; trying a fallback model.",
+                    model,
+                )
+                break
+
+    raise last_failure or RuntimeError("Gemini read did not complete.")
 
 
 def _encode_jpeg(image: Image.Image) -> bytes:

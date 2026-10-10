@@ -41,13 +41,31 @@ available.
 1. In `frontend`, install packages with `npm install`.
 2. Start the app with `npm run dev`.
 3. Sign in with Google, enter the answer key in the answer-key box (the number entered
-   sets the question count), enter optional full marks, select full-sheet images, and scan.
+   sets the question count), enter optional full marks, select up to four full-sheet images
+   per scan, and scan.
+4. Optionally name and save answer keys to reuse them on this browser and device; saved keys
+   can be loaded or deleted from the scanner.
+5. Scan results are saved in browser local storage separately for each signed-in account.
+   They remain on that device until deleted from the results list and are not synced to
+   other devices or browsers.
+
+The application dashboard requires Google sign-in. Netlify routes all SPA URLs to the
+authenticated app, and the old public `/free-omr-scanner/` page redirects to the login
+screen. The sitemap lists only the canonical site URL; public marketing content is not
+available without signing in. Saved answer keys are stored in browser local storage on the
+current device and are not synced between browsers. Scan results are also stored locally
+per account on each device until deleted.
+The login page also shows aggregate teacher and successfully scanned-sheet counts. Those
+public totals begin tracking when the statistics endpoint is deployed; older scan records
+cannot be reconstructed from the daily quota data.
 
 The backend defaults to port `8001` (`PORT` or `OMR_PORT` can override it). For local development,
-the frontend defaults to `http://localhost:8001`; for a deployed build, set
-`VITE_API_BASE_URL` to the public backend URL. If a local frontend uses the deployed API,
-include `http://localhost:5173` and `http://127.0.0.1:5173` in the Render service's
-`CORS_ORIGINS` value alongside the deployed website origin.
+the frontend defaults to `http://localhost:8001`; production builds default to the deployed
+API at `https://chemxact-omr-api.onrender.com`. Set `VITE_API_BASE_URL` only when using a
+different backend. Before each scan, the frontend checks `/health` and retries transient
+network failures so a sleeping Render service can wake before image upload begins. If a local
+frontend uses the deployed API, include `http://localhost:5173` and `http://127.0.0.1:5173`
+in the Render service's `CORS_ORIGINS` value alongside the deployed website origin.
 
 ## Production deployment checklist
 
@@ -58,11 +76,11 @@ include `http://localhost:5173` and `http://127.0.0.1:5173` in the Render servic
   Admin service-account JSON as a Secret File named `firebase-adminsdk.json`; its
   mounted path must be `/etc/secrets/firebase-adminsdk.json`. Add the Gemini API key
   as the `GEMINI_API_KEY` secret. The Blueprint restricts API CORS to
-  `https://omr.chemxact.in` and checks `/health`.
-- After Render gives the API its public HTTPS URL, set Netlify's `VITE_API_BASE_URL`
-  environment variable to that URL and trigger a fresh deploy. For a local production
-  build, copy `frontend/.env.example` to `frontend/.env.production` and replace its
-  sample URL.
+  `https://omr.chemxact.in` and `https://www.omr.chemxact.in`, and checks `/health`.
+- The production API URL is configured as the frontend default. If it changes, set
+  Netlify's `VITE_API_BASE_URL` environment variable to the new URL and rebuild the site.
+  For a local production build, copy `frontend/.env.example` to `frontend/.env.production`
+  and update the URL if needed.
 - Add `omr.chemxact.in` to Firebase Authentication's authorized domains and enable
   Google sign-in.
 - Configure `omr.chemxact.in` as a Netlify custom domain and set its DNS record to

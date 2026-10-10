@@ -6,6 +6,7 @@
 **/.env.*
 !**/.env.example
 backend/firebase-adminsdk*.json
+/firebase-adminsdk*.json
 
 # Local dependencies and generated files
 backend/venv/
